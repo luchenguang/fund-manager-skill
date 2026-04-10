@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>基金分析报告</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif; background: #f5f7fa; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 30px; text-align: center; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.1em; opacity: 0.9; }
+
+        .summary { background: white; padding: 25px; border-radius: 12px; margin-bottom: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .summary h2 { color: #2c3e50; margin-bottom: 20px; font-size: 1.8em; }
+        .summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .stat-item { text-align: center; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+        .stat-item .label { display: block; font-size: 0.9em; color: #7f8c8d; margin-bottom: 5px; }
+        .stat-item .value { font-size: 1.5em; font-weight: bold; color: #2c3e50; }
+
+        .funds-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 25px; }
+        .fund-card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: transform 0.2s; }
+        .fund-card:hover { transform: translateY(-5px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+
+        .fund-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #ecf0f1; }
+        .fund-header h3 { color: #2c3e50; font-size: 1.4em; }
+        .data-source { background: #3498db; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; }
+
+        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px; }
+        .info-item { padding: 10px; background: #f8f9fa; border-radius: 6px; }
+        .info-item .label { display: block; font-size: 0.85em; color: #7f8c8d; margin-bottom: 3px; }
+        .info-item .value { font-size: 1.1em; font-weight: 600; color: #2c3e50; }
+
+        .status-info { display: flex; gap: 15px; margin-bottom: 20px; }
+        .status-item { flex: 1; text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px; }
+        .status-item .label { display: block; font-size: 0.85em; color: #7f8c8d; margin-bottom: 3px; }
+        .status-badge { padding: 2px 8px; border-radius: 12px; font-size: 0.85em; font-weight: 600; }
+        .status-badge.open { background: #d4edda; color: #155724; }
+        .status-badge.close { background: #f8d7da; color: #721c24; }
+
+        .cumulative-returns { margin-top: 20px; }
+        .cumulative-returns h4 { color: #2c3e50; margin-bottom: 15px; font-size: 1.2em; }
+        .returns-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .return-item { display: flex; justify-content: space-between; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; }
+        .return-item .period { font-weight: 600; color: #2c3e50; }
+
+        .history-table-container { margin-top: 20px; }
+        .history-table-container h4 { color: #2c3e50; margin-bottom: 15px; font-size: 1.2em; }
+        .history-table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+        .history-table th { background: #f8f9fa; padding: 12px; text-align: left; font-weight: 600; color: #2c3e50; border-bottom: 2px solid #ecf0f1; }
+        .history-table td { padding: 10px 12px; border-bottom: 1px solid #ecf0f1; }
+        .history-table .period { font-weight: 600; color: #2c3e50; }
+        .history-table tr:hover { background: #f8f9fa; }
+
+        .portfolio-funds { margin-top: 20px; }
+        .portfolio-funds-table { width: 100%; border-collapse: collapse; font-size: 0.95em; margin-top: 15px; }
+        .portfolio-funds-table th { background: #f0f4f8; padding: 12px; text-align: left; font-weight: 600; color: #2c3e50; border-bottom: 2px solid #dfe6ed; }
+        .portfolio-funds-table td { padding: 10px 12px; border-bottom: 1px solid #ecf0f1; }
+        .portfolio-funds-table .fund-code { font-weight: 600; color: #7f8c8d; }
+        .portfolio-funds-table .fund-name { font-weight: 600; color: #2c3e50; }
+        .portfolio-funds-table tr:hover { background: #f8f9fa; }
+
+        .positive { color: #e74c3c; font-weight: bold; }
+        .negative { color: #27ae60; font-weight: bold; }
+        .neutral { color: #f39c12; font-weight: bold; }
+
+        .report-date { color: #e74c3c; font-weight: bold; font-size: 1.1em; }
+
+        .suggestions { background: white; padding: 25px; border-radius: 12px; margin-top: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .suggestions h3 { color: #2c3e50; margin-bottom: 15px; font-size: 1.4em; }
+        .suggestion-item { padding: 12px; margin-bottom: 10px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3; }
+
+        .footer { text-align: center; color: #7f8c8d; margin-top: 40px; padding: 20px; font-size: 0.9em; }
+        .footer p { margin: 5px 0; }
+
+        @media (max-width: 768px) {
+            .info-grid { grid-template-columns: 1fr; }
+            .returns-grid { grid-template-columns: 1fr; }
+            .status-info { flex-direction: column; }
+            .funds-container { grid-template-columns: 1fr; }
+        }
+
+        /* 多组合切换器样式 */
+        .pool-switcher { margin-bottom: 20px; }
+        .pool-tabs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .pool-tab { 
+            padding: 10px 20px; border: 2px solid transparent; background: white; 
+            color: #2c3e50; font-size: 1em; font-weight: 600; border-radius: 8px; 
+            cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .pool-tab:hover { border-color: #667eea; }
+        .pool-tab.active { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; 
+        }
+        .pool-tab .pool-count { font-size: 0.85em; opacity: 0.8; margin-left: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 基金投资组合分析报告</h1>
+            <p>专业投资分析 | 风险提示：投资有风险，决策需谨慎</p>
+        </div>
+
+        <div class="summary">
+            <!-- 组合切换器 -->
+            <div class="pool-switcher" id="pool-switcher">
+                <div class="pool-tabs" id="pool-tabs"></div>
+            </div>
+            <!-- 组合概览数据 -->
+            <h2>📈 <span id="current-pool-name">组合概览</span> <span id="report-date"></span></h2>
+            <div class="summary-stats">
+                <div class="stat-item">
+                    <span class="label">总基金数</span>
+                    <span class="value" id="total-funds">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">成功获取</span>
+                    <span class="value" id="successful-funds">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">平均涨跌幅</span>
+                    <span class="value" id="portfolio-change">--</span>
+                </div>
+            </div>
+            <table class="portfolio-funds-table" id="portfolio-table">
+                <thead>
+                    <tr>
+                        <th>基金代码</th>
+                        <th>基金名称</th>
+                        <th onclick="sortTable(2)" style="cursor:pointer">昨日涨跌幅 <span class="sort-icon">↕</span></th>
+                        <th onclick="sortTable(3)" style="cursor:pointer">今日涨跌幅 <span class="sort-icon">↕</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- 基金组合列表 -->
+                </tbody>
+            </table>
+        </div>
+
+        <h2 style="color: #2c3e50; margin-bottom: 20px;">💰 基金详细信息 (<span id="timestamp"></span>)</h2>
+        <div class="funds-container">
+            <!-- 基金详情 -->
+        </div>
+
+        <div class="footer">
+            <p>报告生成时间: <span id="timestamp"></span></p>
+            <p>数据仅供参考，投资决策需谨慎考虑个人风险承受能力</p>
+            <p>© 2026 基金投资分析系统 | 专业 · 智能 · 可靠</p>
+        </div>
+    </div>
+
+    <script>
+        // 多组合数据容器
+        let poolData = {};
+        let currentPool = null;
+
+        // 切换组合
+        function switchPool(poolName) {
+            const data = poolData[poolName];
+            if (!data) return;
+
+            currentPool = poolName;
+
+            // 更新 tab 状态
+            document.querySelectorAll('.pool-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.pool === poolName);
+            });
+
+            // 更新概览标题
+            document.getElementById('current-pool-name').textContent = poolName;
+
+            // 更新概览数据
+            const summary = data.summary;
+            document.getElementById('total-funds').textContent = summary.total_funds;
+            document.getElementById('successful-funds').textContent = summary.successful_funds;
+            const changeElem = document.getElementById('portfolio-change');
+            changeElem.textContent = (summary.portfolio_change >= 0 ? '+' : '') + summary.portfolio_change.toFixed(2) + '%';
+            changeElem.className = 'value ' + (summary.portfolio_change >= 0 ? 'positive' : 'negative');
+
+            // 更新基金列表表格
+            renderPortfolioTable(data.funds);
+
+            // 更新基金详情
+            renderFundDetails(data.funds);
+        }
+
+        // 渲染基金组合表格
+        function renderPortfolioTable(funds) {
+            const tbody = document.querySelector('#portfolio-table tbody');
+            let html = '';
+            for (const fund of funds) {
+                if (fund.current_info) {
+                    const yesterdayData = fund.current_info.昨日涨跌幅 || {};
+                    const todayData = fund.current_info.今日涨跌幅 || {};
+                    const yesterdayValue = yesterdayData.value || '--';
+                    const todayValue = todayData.value || '--';
+
+                    let yesterdayClass = 'neutral';
+                    let todayClass = 'neutral';
+                    try {
+                        if (yesterdayValue !== '--' && parseFloat(yesterdayValue) > 0) yesterdayClass = 'positive';
+                        else if (yesterdayValue !== '--' && parseFloat(yesterdayValue) < 0) yesterdayClass = 'negative';
+                        if (todayValue !== '--' && parseFloat(todayValue) > 0) todayClass = 'positive';
+                        else if (todayValue !== '--' && parseFloat(todayValue) < 0) todayClass = 'negative';
+                    } catch(e) {}
+
+                    html += `<tr>
+                        <td class="fund-code">${fund.fund_code}</td>
+                        <td class="fund-name">${fund.fund_name}</td>
+                        <td class="${yesterdayClass}">${yesterdayValue}</td>
+                        <td class="${todayClass}">${todayValue}</td>
+                    </tr>`;
+                }
+            }
+            tbody.innerHTML = html || '<tr><td colspan="4">暂无数据</td></tr>';
+            sortTable(2);
+        }
+
+        // 渲染基金详情
+        function renderFundDetails(funds) {
+            const container = document.querySelector('.funds-container');
+            let html = '';
+            for (const fund of funds) {
+                if (fund.current_info) {
+                    const info = fund.current_info;
+                    
+                    // 计算日增长率的颜色
+                    const dailyGrowth = info.日增长率 || '--';
+                    let todayClass = 'neutral';
+                    if (dailyGrowth !== '--') {
+                        try {
+                            const val = parseFloat(dailyGrowth.replace('%', '').replace('+', ''));
+                            if (val > 0) todayClass = 'positive';
+                            else if (val < 0) todayClass = 'negative';
+                            else todayClass = 'neutral';
+                        } catch(e) {}
+                    }
+
+                    const todayData = info.今日涨跌幅 || {};
+                    const todayValue = todayData.value || '--';
+
+                    // 渲染历史业绩表格
+                    let historyTableHtml = '';
+                    // 按固定顺序显示常用时间段
+                    const periodOrder = ['近1月', '近3月', '近6月', '近1年', '近3年', '近5年', '成立以来', '今年以来'];
+                    
+                    for (const period of periodOrder) {
+                        const returnVal = fund.cumulative_returns ? fund.cumulative_returns[period] : null;
+                        const drawdownVal = fund.max_drawdowns ? fund.max_drawdowns[period] : null;
+                        
+                        let returnStr = '-';
+                        let drawdownStr = '-';
+                        let returnClass = '';
+                        
+                        if (returnVal != null && returnVal !== undefined) {
+                            returnClass = returnVal >= 0 ? 'positive' : 'negative';
+                            returnStr = (returnVal >= 0 ? '+' : '') + returnVal.toFixed(2) + '%';
+                        }
+                        
+                        if (drawdownVal != null && drawdownVal !== undefined) {
+                            drawdownStr = '-' + drawdownVal.toFixed(2) + '%';
+                        }
+                        
+                        historyTableHtml += `<tr>
+                            <td class="period">${period}</td>
+                            <td class="${returnClass}">${returnStr}</td>
+                            <td class="negative">${drawdownStr}</td>
+                        </tr>`;
+                    }
+                    if (!historyTableHtml) {
+                        historyTableHtml = '<tr><td colspan="3">暂无历史业绩数据</td></tr>';
+                    }
+
+                    // 渲染基本信息（申购/赎回状态、手续费）
+                    const purchaseStatus = info.申购状态 || '未知';
+                    const redeemStatus = info.赎回状态 || '未知';
+                    const fee = info.手续费 || '未知';
+
+                    html += `<div class="fund-card">
+                        <div class="fund-header">
+                            <h3>${fund.fund_code} - ${fund.fund_name}</h3>
+                            <span class="data-source">数据源: ${fund.data_source || '未知'}</span>
+                        </div>
+                        <div class="fund-basic-info">
+                            <div class="info-grid">
+                                <div class="info-item">
+                                    <span class="label">单位净值:</span>
+                                    <span class="value">${info.单位净值 || 'N/A'}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">日增长率:</span>
+                                    <span class="${todayClass}">${info.日增长率 || '--'}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">净值日期:</span>
+                                    <span class="value">${info.净值日期 || 'N/A'}</span>
+                                </div>
+                            </div>
+                            <div class="status-info">
+                                <div class="status-item">
+                                    <span class="label">申购状态:</span>
+                                    <span class="status-badge open">${purchaseStatus}</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="label">赎回状态:</span>
+                                    <span class="status-badge open">${redeemStatus}</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="label">手续费:</span>
+                                    <span class="value">${fee}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="history-table-container">
+                            <h4>📈 历史业绩</h4>
+                            <table class="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>周期</th>
+                                        <th>收益率</th>
+                                        <th>最大回撤</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${historyTableHtml}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>`;
+                }
+            }
+            container.innerHTML = html || '<div class="no-funds">暂无有效基金数据</div>';
+        }
+
+        // 初始化多组合功能
+        function initMultiPool() {
+            const container = document.getElementById('pool-data');
+            if (!container) return;
+
+            try {
+                poolData = JSON.parse(container.innerHTML);
+            } catch(e) {
+                console.error('解析组合数据失败:', e);
+                return;
+            }
+
+            const poolNames = Object.keys(poolData);
+            if (poolNames.length === 0) return;
+
+            // 渲染 tab
+            const tabsContainer = document.getElementById('pool-tabs');
+            if (!tabsContainer) return;
+            
+            let tabsHtml = '';
+            poolNames.forEach((name, idx) => {
+                const count = poolData[name].funds.length;
+                tabsHtml += `<button class="pool-tab ${idx === 0 ? 'active' : ''}" data-pool="${name}" onclick="switchPool('${name}')">
+                    ${name}<span class="pool-count">(${count}只)</span>
+                </button>`;
+            });
+            tabsContainer.innerHTML = tabsHtml;
+
+            // 默认选择第一个组合
+            currentPool = poolNames[0];
+            switchPool(poolNames[0]);
+        }
+
+        // 表格排序功能
+        let sortDirection = { 2: null, 3: null };
+        
+        function sortTable(columnIndex) {
+            const table = document.getElementById("portfolio-table");
+            if (!table) return;
+            const tbody = table.querySelector("tbody");
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            
+            if (sortDirection[columnIndex] === null) {
+                sortDirection[columnIndex] = false;
+            } else {
+                sortDirection[columnIndex] = !sortDirection[columnIndex];
+            }
+            
+            const isAsc = sortDirection[columnIndex];
+            const headers = table.querySelectorAll("th");
+            headers.forEach((th, index) => {
+                const icon = th.querySelector(".sort-icon");
+                if (icon) icon.textContent = index === columnIndex ? (isAsc ? "↑" : "↓") : "↕";
+            });
+            
+            rows.sort((a, b) => {
+                const aText = a.cells[columnIndex].textContent.trim();
+                const bText = b.cells[columnIndex].textContent.trim();
+                if (aText === "--" || bText === "--") return 0;
+                const aVal = parseFloat(aText.replace("%", "").replace("+", ""));
+                const bVal = parseFloat(bText.replace("%", "").replace("+", ""));
+                if (isNaN(aVal) || isNaN(bVal)) return 0;
+                return isAsc ? aVal - bVal : bVal - aVal;
+            });
+            
+            rows.forEach(row => tbody.appendChild(row));
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化多组合
+            initMultiPool();
+
+            // 添加动画效果
+            const cards = document.querySelectorAll('.fund-card');
+            cards.forEach((card, index) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    card.style.transition = 'opacity 0.5s, transform 0.5s';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, index * 100);
+            });
+        });
+    </script>
+
+    <!-- 多组合数据容器 -->
+    <script type="application/json" id="pool-data"></script>
+</body>
+</html>

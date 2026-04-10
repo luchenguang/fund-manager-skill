@@ -1,0 +1,15 @@
+# 生成的报告文件
+fund_analysis_report.html
+fund_report_data.json
+
+# 临时目录
+scripts/tmp/
+scripts/__pycache__/
+# 私人数据
+scripts/fund_pools.json
+
+# claude
+.claude/
+
+# 虚拟环境
+venv/
