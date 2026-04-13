@@ -35,3 +35,8 @@ python query_fund.py <基金代码> --save --output <文件>
 - JSON数据结构：`昨日涨跌幅`/`今日涨跌幅` 是嵌套对象 `{"value": "+0.28%", "date": "04-08"}`
 - 并行查询：最多3个线程同时查询
 - 报告模板：`scripts/assets/report_template.html`
+- Markdown模板：`scripts/assets/report_template.md`
+
+## Git 提交规则
+- 提交前必须先展示修改摘要并询问用户确认
+- 得到明确回复后再执行 git add / commit / push
