@@ -14,6 +14,7 @@ compatibility:
 - 实时净值和涨跌幅查询
 - 历史表现分析（收益率、最大回撤）
 - HTML投资报告生成
+- Markdown投资报告生成
 
 ## 文件结构
 
@@ -24,9 +25,12 @@ fund-manager-skill/
 │   ├── query_fund.py        # 单只基金数据查询
 │   ├── fund_pool_manager.py # 基金池管理
 │   ├── fund_report_generator.py # 报告生成
-│   └── fund_pools.json      # 基金池配置
-├── fund_analysis_report.html # 生成的报告
-└── fund_report_data.json  # 基金数据缓存
+│   ├── fund_pools.json      # 基金池配置
+│   └── assets/
+│       ├── report_template.html # HTML模板
+│       └── report_template.md   # Markdown模板
+├── fund_analysis_report.html # 生成的HTML报告
+└── fund_analysis_report.md   # 生成的Markdown报告
 ```
 
 ## 基金池配置
@@ -47,7 +51,9 @@ fund-manager-skill/
 ```bash
 cd scripts
 source ../venv/bin/activate
-python fund_report_generator.py -p <池名称>
+python fund_report_generator.py -p <池名称>    # 生成单个组合报告 (默认HTML)
+python fund_report_generator.py                 # 生成所有组合汇总报告
+python fund_report_generator.py -f markdown  # 生成Markdown格式报告
 ```
 
 ### 基金池管理
