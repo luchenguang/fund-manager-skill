@@ -648,7 +648,7 @@ class FundReportGenerator:
             logger.warning(f"检查基金池更新时间失败: {e}")
             return False
 
-    def run(self, pool_name: str = "我的基金池", output_dir: str = None):
+    def run(self, pool_name: str = "我的基金池", output_dir: str = None, report_format: str = "html"):
         """运行完整的报告生成流程"""
         try:
             if output_dir:
@@ -693,13 +693,19 @@ class FundReportGenerator:
 
             self.save_fund_data(fund_results, data_file)
 
-            # 5. 生成HTML报告
-            if output_dir:
-                report_file = os.path.join(output_dir, "fund_report.html")
+            # 5. 生成报告
+            if report_format == "markdown":
+                if output_dir:
+                    report_file = os.path.join(output_dir, "fund_report.md")
+                else:
+                    report_file = "../fund_analysis_report.md"
+                report_path = self.generate_markdown_report(fund_results, report_file, pool_name)
             else:
-                report_file = None
-
-            report_path = self.generate_html_report(fund_results, report_file)
+                if output_dir:
+                    report_file = os.path.join(output_dir, "fund_report.html")
+                else:
+                    report_file = None
+                report_path = self.generate_html_report(fund_results, report_file)
 
             if report_path:
                 logger.info("=" * 60)
@@ -726,7 +732,7 @@ class FundReportGenerator:
             # 确保清理临时目录
             self.cleanup_tmp_dir()
 
-    def run_all_pools(self, output_dir: str = None):
+    def run_all_pools(self, output_dir: str = None, report_format: str = "html"):
         """运行所有基金池，生成汇总报告"""
         try:
             if output_dir:
@@ -794,13 +800,19 @@ class FundReportGenerator:
                 logger.error("没有任何组合数据")
                 return False
 
-            # 2. 生成汇总HTML报告
-            if output_dir:
-                report_file = os.path.join(output_dir, "fund_report.html")
+            # 2. 生成汇总报告
+            if report_format == "markdown":
+                if output_dir:
+                    report_file = os.path.join(output_dir, "fund_report.md")
+                else:
+                    report_file = "../fund_analysis_report.md"
+                report_path = self.generate_multi_pool_markdown(all_results, report_file)
             else:
-                report_file = None
-
-            report_path = self.generate_multi_pool_report(all_results, report_file)
+                if output_dir:
+                    report_file = os.path.join(output_dir, "fund_report.html")
+                else:
+                    report_file = None
+                report_path = self.generate_multi_pool_report(all_results, report_file)
 
             if report_path:
                 logger.info("=" * 60)
@@ -887,12 +899,224 @@ class FundReportGenerator:
             logger.error(f"生成多组合汇总报告失败: {e}")
             return ""
 
+    def generate_markdown_report(self, fund_results: Dict, output_file: str, pool_name: str = None) -> str:
+        """生成 Markdown 格式的基金报告（丰富版）"""
+        if output_file is None:
+            output_file = "../fund_analysis_report.md"
+
+        try:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            portfolio_summary = fund_results.get("portfolio_summary", {})
+
+            md_content = f"""# 📊 基金分析报告
+
+> ⏰ 生成时间: {timestamp}
+
+---
+
+## 🎯 投资组合摘要
+
+| 📌 指标 | 📊 数值 |
+|:------|:------:|
+| 总基金数 | {fund_results['total_funds']} |
+| 成功获取 | {fund_results['successful_funds']} |
+| 平均涨跌幅 | **{portfolio_summary.get('portfolio_change', 0):+.2f}%** |
+
+---
+
+## 📋 基金组合列表
+
+| 基金代码 | 基金名称 | 昨日涨跌幅 | 今日涨跌幅 |
+|:--------|:---------|:---------:|:---------:|
+"""
+
+            for fund_code, details in fund_results["fund_details"].items():
+                if "current_info" in details:
+                    fund_name = details.get("fund_name", "未知")
+                    yesterday_data = details["current_info"].get("昨日涨跌幅") or {}
+                    today_data = details["current_info"].get("今日涨跌幅") or {}
+
+                    yesterday_value = yesterday_data.get('value') if isinstance(yesterday_data, dict) else None
+                    yesterday_value = yesterday_value if yesterday_value is not None else "--"
+                    
+                    today_value = today_data.get('value') if isinstance(today_data, dict) else None
+                    today_value = today_value if today_value is not None else "--"
+
+                    md_content += f"| {fund_code} | {fund_name} | {yesterday_value} | {today_value} |\n"
+
+            md_content += "\n"
+
+            for fund_code, details in fund_results["fund_details"].items():
+                if "current_info" in details:
+                    fund_name = details.get("fund_name", "未知")
+                    current_info = details["current_info"]
+                    cumulative_returns = details.get("cumulative_returns", {})
+                    max_drawdowns = details.get("max_drawdowns", {})
+
+                    today_data = current_info.get("今日涨跌幅") or {}
+                    today_value = today_data.get('value') if isinstance(today_data, dict) else None
+                    today_value = f"{today_value}" if today_value is not None else "--"
+
+                    md_content += f"""## 📌 {fund_code} - {fund_name}
+
+| 项目 | 数值 |
+|:-----|:----:|
+| 单位净值 | {current_info.get('单位净值', 'N/A')} |
+| 日增长率 | **{today_value}** |
+| 净值日期 | {current_info.get('净值日期', 'N/A')} |
+| 申购状态 | ✅ {current_info.get('申购状态', '未知')} |
+| 赎回状态 | ✅ {current_info.get('赎回状态', '未知')} |
+
+#### 📈 历史业绩
+
+| 周期 | 收益率 | 最大回撤 |
+|:-----|:------:|:--------:|
+"""
+
+                    period_order = ['近1月', '近3月', '近6月', '近1年', '近3年', '近5年', '今年以来', '成立以来']
+                    for period in period_order:
+                        return_val = cumulative_returns.get(period)
+                        drawdown_val = max_drawdowns.get(period)
+
+                        return_str = f"{return_val:+.2f}%" if return_val is not None else "-"
+                        drawdown_str = f"-{drawdown_val:.2f}%" if drawdown_val is not None else "-"
+
+                        md_content += f"| {period} | {return_str} | {drawdown_str} |\n"
+
+                    md_content += "\n"
+
+            suggestions = self.generate_suggestions(fund_results)
+            md_content += """## 💡 投资建议
+
+"""
+            for suggestion in suggestions:
+                md_content += f"- {suggestion}\n"
+
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+
+            logger.info(f"Markdown报告已生成: {output_file}")
+            return output_file
+
+        except Exception as e:
+            logger.error(f"生成Markdown报告失败: {e}")
+            return ""
+
+    def generate_multi_pool_markdown(self, all_results: Dict, output_file: str = None) -> str:
+        """生成多组合汇总 Markdown 报告"""
+        if output_file is None:
+            output_file = "../fund_analysis_report.md"
+
+        try:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            md_content = f"""# 📊 基金分析报告（汇总）
+
+> ⏰ 生成时间: {timestamp}
+
+---
+
+## 🎯 各组合表现摘要
+
+| 📌 组合名称 | 📊 基金数 | 📈 平均涨跌幅 |
+|:-----------|:--------:|:------------:|
+"""
+
+            for pool_name, data in all_results.items():
+                summary = data["portfolio_summary"]
+                md_content += f"| 🏷️ {pool_name} | {summary['successful_funds']}/{summary['total_funds']} | **{summary['portfolio_change']:+.2f}%** |\n"
+
+            md_content += "\n---\n\n"
+
+            for pool_name, data in all_results.items():
+                fund_results = data["fund_results"]
+                summary = data["portfolio_summary"]
+
+                md_content += f"""## 🏷️ {pool_name}
+
+**组合表现**: {summary['successful_funds']}/{summary['total_funds']} 只基金，平均 **{summary['portfolio_change']:+.2f}%**
+
+### 📋 基金列表
+
+| 基金代码 | 基金名称 | 昨日涨跌幅 | 今日涨跌幅 |
+|:--------|:---------|:---------:|:---------:|
+"""
+
+                for fund_code, details in fund_results["fund_details"].items():
+                    if "current_info" in details:
+                        fund_name = details.get("fund_name", "未知")
+                        yesterday_data = details["current_info"].get("昨日涨跌幅") or {}
+                        today_data = details["current_info"].get("今日涨跌幅") or {}
+
+                        yesterday_value = yesterday_data.get('value', '--') if isinstance(yesterday_data, dict) else '--'
+                        today_value = today_data.get('value', '--') if isinstance(today_data, dict) else '--'
+
+                        md_content += f"| {fund_code} | {fund_name} | {yesterday_value} | {today_value} |\n"
+
+                md_content += "\n"
+
+                for fund_code, details in fund_results["fund_details"].items():
+                    if "current_info" in details:
+                        fund_name = details.get("fund_name", "未知")
+                        current_info = details["current_info"]
+                        cumulative_returns = details.get("cumulative_returns", {})
+                        max_drawdowns = details.get("max_drawdowns", {})
+
+                        today_data = current_info.get("今日涨跌幅") or {}
+                        today_value = today_data.get('value', '--') if isinstance(today_data, dict) else '--'
+
+                        md_content += f"""#### 📌 {fund_code} - {fund_name}
+
+| 项目 | 数值 |
+|:-----|:----:|
+| 单位净值 | {current_info.get('单位净值', 'N/A')} |
+| 日增长率 | **{today_value}** |
+| 净值日期 | {current_info.get('净值日期', 'N/A')} |
+
+| 周期 | 收益率 | 最大回撤 |
+|:-----|:------:|:--------:|
+"""
+
+                        period_order = ['近1月', '近3月', '近6月', '近1年', '近3年', '近5年', '今年以来', '成立以来']
+                        for period in period_order:
+                            return_val = cumulative_returns.get(period)
+                            drawdown_val = max_drawdowns.get(period)
+
+                            return_str = f"{return_val:+.2f}%" if return_val is not None else "-"
+                            drawdown_str = f"-{drawdown_val:.2f}%" if drawdown_val is not None else "-"
+
+                            md_content += f"| {period} | {return_str} | {drawdown_str} |\n"
+
+                        md_content += "\n"
+
+            if all_results:
+                first_pool = list(all_results.keys())[0]
+                fund_results = all_results[first_pool]["fund_results"]
+                suggestions = self.generate_suggestions(fund_results)
+
+                md_content += """## 💡 投资建议
+
+"""
+                for suggestion in suggestions:
+                    md_content += f"- {suggestion}\n"
+
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+
+            logger.info(f"多组合汇总Markdown报告已生成: {output_file}")
+            return output_file
+
+        except Exception as e:
+            logger.error(f"生成多组合汇总Markdown报告失败: {e}")
+            return ""
+
 
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='基金报告生成工具')
     parser.add_argument('--pool', '-p', help='指定基金池名称 (默认生成所有组合的汇总报告)')
     parser.add_argument('--output', '-o', help='输出目录')
+    parser.add_argument('--format', '-f', choices=['html', 'markdown'], default='html', help='报告格式 (默认html)')
     parser.add_argument('--verbose', '-v', action='store_true', help='详细输出')
 
     args = parser.parse_args()
@@ -905,10 +1129,10 @@ def main():
     
     if args.pool:
         # 指定单个组合
-        success = generator.run(pool_name=args.pool, output_dir=args.output)
+        success = generator.run(pool_name=args.pool, output_dir=args.output, report_format=args.format)
     else:
         # 默认生成所有组合的汇总报告
-        success = generator.run_all_pools(output_dir=args.output)
+        success = generator.run_all_pools(output_dir=args.output, report_format=args.format)
 
     if success:
         print("\n✅ 基金分析报告生成成功！")
@@ -916,6 +1140,226 @@ def main():
     else:
         print("\n❌ 基金分析报告生成失败！")
         sys.exit(1)
+
+    def generate_markdown_report(self, fund_results: Dict, output_file: str, pool_name: str = None) -> str:
+        """生成 Markdown 格式的基金报告（丰富版）"""
+        if output_file is None:
+            output_file = "../fund_analysis_report.md"
+
+        try:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            portfolio_summary = fund_results.get("portfolio_summary", {})
+
+            md_content = f"""# 📊 基金分析报告
+
+> ⏰ 生成时间: {timestamp}
+
+---
+
+## 🎯 投资组合摘要
+
+| 📌 指标 | 📊 数值 |
+|:------|:------:|
+| 总基金数 | {fund_results['total_funds']} |
+| 成功获取 | {fund_results['successful_funds']} |
+| 平均涨跌幅 | **{portfolio_summary.get('portfolio_change', 0):+.2f}%** |
+
+---
+
+## 📋 基金组合列表
+
+| 基金代码 | 基金名称 | 昨日涨跌幅 | 今日涨跌幅 |
+|:--------|:---------|:---------:|:---------:|
+"""
+
+            # 添加基金列表
+            for fund_code, details in fund_results["fund_details"].items():
+                if "current_info" in details:
+                    fund_name = details.get("fund_name", "未知")
+                    yesterday_data = details["current_info"].get("昨日涨跌幅") or {}
+                    today_data = details["current_info"].get("今日涨跌幅") or {}
+
+                    yesterday_value = yesterday_data.get('value') if isinstance(yesterday_data, dict) else None
+                    yesterday_value = yesterday_value if yesterday_value is not None else "--"
+                    
+                    today_value = today_data.get('value') if isinstance(today_data, dict) else None
+                    today_value = today_value if today_value is not None else "--"
+
+                    md_content += f"| {fund_code} | {fund_name} | {yesterday_value} | {today_value} |\n"
+
+            md_content += "\n"
+
+            # 添加每个基金的详细信息
+            for fund_code, details in fund_results["fund_details"].items():
+                if "current_info" in details:
+                    fund_name = details.get("fund_name", "未知")
+                    current_info = details["current_info"]
+                    cumulative_returns = details.get("cumulative_returns", {})
+                    max_drawdowns = details.get("max_drawdowns", {})
+
+                    today_data = current_info.get("今日涨跌幅") or {}
+                    today_value = today_data.get('value') if isinstance(today_data, dict) else None
+                    today_value = f"**{today_value}**" if today_value is not None else "**--**"
+
+                    md_content += f"""## 📌 {fund_code} - {fund_name}
+
+| 项目 | 数值 |
+|:-----|:----:|
+| 单位净值 | {current_info.get('单位净值', 'N/A')} |
+| 日增长率 | **{today_value}** |
+| 净值日期 | {current_info.get('净值日期', 'N/A')} |
+| 申购状态 | ✅ {current_info.get('申购状态', '未知')} |
+| 赎回状态 | ✅ {current_info.get('赎回状态', '未知')} |
+
+#### 📈 历史业绩
+
+| 周期 | 收益率 | 最大回撤 |
+|:-----|:------:|:--------:|
+"""
+
+                    period_order = ['近1月', '近3月', '近6月', '近1年', '近3年', '近5年', '今年以来', '成立以来']
+                    for period in period_order:
+                        return_val = cumulative_returns.get(period)
+                        drawdown_val = max_drawdowns.get(period)
+
+                        return_str = f"{return_val:+.2f}%" if return_val is not None else "-"
+                        drawdown_str = f"-{drawdown_val:.2f}%" if drawdown_val is not None else "-"
+
+                        md_content += f"| {period} | {return_str} | {drawdown_str} |\n"
+
+                    md_content += "\n"
+
+            # 添加投资建议
+            suggestions = self.generate_suggestions(fund_results)
+            md_content += """## 💡 投资建议
+
+"""
+            for suggestion in suggestions:
+                md_content += f"- {suggestion}\n"
+
+            # 写入文件
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+
+            logger.info(f"Markdown报告已生成: {output_file}")
+            return output_file
+
+        except Exception as e:
+            logger.error(f"生成Markdown报告失败: {e}")
+            return ""
+
+    def generate_multi_pool_markdown(self, all_results: Dict, output_file: str = None) -> str:
+        """生成多组合汇总 Markdown 报告"""
+        if output_file is None:
+            output_file = "../fund_analysis_report.md"
+
+        try:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            md_content = f"""# 📊 基金分析报告（汇总）
+
+> ⏰ 生成时间: {timestamp}
+
+---
+
+## 🎯 各组合表现摘要
+
+| 📌 组合名称 | 📊 基金数 | 📈 平均涨跌幅 |
+|:-----------|:--------:|:------------:|
+"""
+
+            # 添加每个组合的摘要
+            for pool_name, data in all_results.items():
+                summary = data["portfolio_summary"]
+                md_content += f"| 🏷️ {pool_name} | {summary['successful_funds']}/{summary['total_funds']} | **{summary['portfolio_change']:+.2f}%** |\n"
+
+            md_content += "\n---\n\n"
+
+            # 添加每个组合的详细信息
+            for pool_name, data in all_results.items():
+                fund_results = data["fund_results"]
+                summary = data["portfolio_summary"]
+
+                md_content += f"""## 🏷️ {pool_name}
+
+**组合表现**: {summary['successful_funds']}/{summary['total_funds']} 只基金，平均 **{summary['portfolio_change']:+.2f}%**
+
+### 📋 基金列表
+
+| 基金代码 | 基金名称 | 昨日涨跌幅 | 今日涨跌幅 |
+|:--------|:---------|:---------:|:---------:|
+"""
+
+                for fund_code, details in fund_results["fund_details"].items():
+                    if "current_info" in details:
+                        fund_name = details.get("fund_name", "未知")
+                        yesterday_data = details["current_info"].get("昨日涨跌幅") or {}
+                        today_data = details["current_info"].get("今日涨跌幅") or {}
+
+                        yesterday_value = yesterday_data.get('value', '--') if isinstance(yesterday_data, dict) else '--'
+                        today_value = today_data.get('value', '--') if isinstance(today_data, dict) else '--'
+
+                        md_content += f"| {fund_code} | {fund_name} | {yesterday_value} | {today_value} |\n"
+
+                md_content += "\n"
+
+                # 添加每个基金的详细信息
+                for fund_code, details in fund_results["fund_details"].items():
+                    if "current_info" in details:
+                        fund_name = details.get("fund_name", "未知")
+                        current_info = details["current_info"]
+                        cumulative_returns = details.get("cumulative_returns", {})
+                        max_drawdowns = details.get("max_drawdowns", {})
+
+                        today_data = current_info.get("今日涨跌幅") or {}
+                        today_value = today_data.get('value', '--') if isinstance(today_data, dict) else '--'
+
+                        md_content += f"""#### 📌 {fund_code} - {fund_name}
+
+| 项目 | 数值 |
+|:-----|:----:|
+| 单位净值 | {current_info.get('单位净值', 'N/A')} |
+| 日增长率 | **{today_value}** |
+| 净值日期 | {current_info.get('净值日期', 'N/A')} |
+
+| 周期 | 收益率 | 最大回撤 |
+|:-----|:------:|:--------:|
+"""
+
+                        period_order = ['近1月', '近3月', '近6月', '近1年', '近3年', '近5年', '今年以来', '成立以来']
+                        for period in period_order:
+                            return_val = cumulative_returns.get(period)
+                            drawdown_val = max_drawdowns.get(period)
+
+                            return_str = f"{return_val:+.2f}%" if return_val is not None else "-"
+                            drawdown_str = f"-{drawdown_val:.2f}%" if drawdown_val is not None else "-"
+
+                            md_content += f"| {period} | {return_str} | {drawdown_str} |\n"
+
+                        md_content += "\n"
+
+            # 添加投资建议（从第一个组合获取）
+            if all_results:
+                first_pool = list(all_results.keys())[0]
+                fund_results = all_results[first_pool]["fund_results"]
+                suggestions = self.generate_suggestions(fund_results)
+
+                md_content += """## 💡 投资建议
+
+"""
+                for suggestion in suggestions:
+                    md_content += f"- {suggestion}\n"
+
+            # 写入文件
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+
+            logger.info(f"多组合汇总Markdown报告已生成: {output_file}")
+            return output_file
+
+        except Exception as e:
+            logger.error(f"生成多组合汇总Markdown报告失败: {e}")
+            return ""
 
 
 if __name__ == "__main__":
