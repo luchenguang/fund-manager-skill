@@ -245,68 +245,14 @@ class FundReportGenerator:
             logger.error(f"保存基金数据失败: {e}")
             return ""
 
-    def load_report_generator(self):
-        """加载报告生成器模块"""
-        try:
-            from generate_report import FundReportGenerator as ReportGenerator
-            return ReportGenerator()
-        except ImportError as e:
-            logger.error(f"导入报告生成器失败: {e}")
-            return None
-
     def generate_html_report(self, fund_results: Dict, output_file: str = None) -> str:
         """生成HTML格式的报告"""
         if output_file is None:
-            output_file = "../fund_analysis_report.html"  # 保存到根目录
+            output_file = "../fund_analysis_report.html"
 
-        # 加载报告生成器
-        report_generator = self.load_report_generator()
-        if not report_generator:
-            logger.error("无法加载报告生成器，尝试使用模板生成基础报告")
-            return self.generate_basic_html_report(fund_results, output_file)
-
-        try:
-            # 准备数据格式
-            fund_data = {
-                "total_funds": fund_results["total_funds"],
-                "successful_funds": fund_results["successful_funds"],
-                "portfolio_change": fund_results.get("portfolio_summary", {}).get("portfolio_change", 0),
-                "fund_details": {}
-            }
-
-            # 整理基金详情
-            for fund_code, details in fund_results["fund_details"].items():
-                if "current_info" in details:
-                    fund_data["fund_details"][fund_code] = {
-                        "current_price": details["current_info"].get("单位净值", 0),
-                        "change_percent": 0.0,
-                        "change_amount": 0.0,
-                        "volume": 0
-                    }
-
-                    # 解析涨跌幅
-                    change_rate = details["current_info"].get("日增长率", "0%")
-                    if change_rate:
-                        try:
-                            fund_data["fund_details"][fund_code]["change_percent"] = float(str(change_rate).replace('%', ''))
-                        except (ValueError, TypeError):
-                            pass
-
-            # 生成报告
-            html_content = report_generator.generate_html_report(
-                fund_data=fund_data,
-                performance_analysis={},
-                optimization_suggestions=self.generate_suggestions(fund_results)
-            )
-
-            # 保存报告
-            report_path = report_generator.save_report(html_content, output_file)
-            logger.info(f"HTML报告已生成: {report_path}")
-            return report_path
-
-        except Exception as e:
-            logger.error(f"生成HTML报告失败: {e}")
-            return self.generate_basic_html_report(fund_results, output_file)
+        # 直接生成基础报告
+        logger.info("生成HTML报告中...")
+        return self.generate_basic_html_report(fund_results, output_file)
 
     def load_template(self) -> str:
         """从文件加载HTML模板"""
