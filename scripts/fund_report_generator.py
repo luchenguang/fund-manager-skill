@@ -41,7 +41,7 @@ class FundReportGenerator:
     def __init__(self):
         self.fund_pool_manager = None
         self.query_fund_script = "query_fund.py"
-        self.report_template = "assets/report_template.html"
+        self.report_template = "assets/report_template_v2.html"
         self.tmp_dir = "tmp"
 
         # 确保临时目录存在（仅在需要时创建）
@@ -83,6 +83,22 @@ class FundReportGenerator:
         if not self.fund_pool_manager:
             return False
         return self.fund_pool_manager.update_fund_info(pool_name, fund_code, fund_info)
+
+    def get_fund_amounts_from_pool(self, pool_name: str) -> Dict[str, float]:
+        """从基金池获取基金金额"""
+        if not self.fund_pool_manager:
+            return {}
+        
+        pool_data = self.fund_pool_manager.pools.get(pool_name, {})
+        funds = pool_data.get("funds", [])
+        
+        amounts = {}
+        for fund in funds:
+            code = fund.get("code")
+            amount = fund.get("amount", 0)
+            if code:
+                amounts[code] = amount
+        return amounts
 
     def query_fund_data(self, fund_code: str, cached_info: Dict = None, pool_name: str = None) -> Dict:
         """调用query_fund.py查询基金数据
@@ -190,45 +206,70 @@ class FundReportGenerator:
         logger.info(f"批量查询完成: 成功 {results['successful_funds']} 个, 失败 {results['failed_funds']} 个")
         return results
 
-    def generate_portfolio_summary(self, fund_results: Dict) -> Dict:
+    def generate_portfolio_summary(self, fund_results: Dict, fund_amounts: Dict = None) -> Dict:
         """生成投资组合摘要"""
+        if fund_amounts is None:
+            fund_amounts = {}
+
         summary = {
             "total_funds": fund_results["total_funds"],
             "successful_funds": fund_results["successful_funds"],
             "portfolio_change": 0.0,
+            "total_amount": 0.0,
             "fund_performance": []
         }
 
         total_change = 0.0
         valid_funds = 0
+        total_amount = 0.0
 
         for fund_code, details in fund_results["fund_details"].items():
-            if "current_info" in details and "日增长率" in details["current_info"]:
+            amount = fund_amounts.get(fund_code, 0)
+            total_amount += amount
+
+        for fund_code, details in fund_results["fund_details"].items():
+            amount = fund_amounts.get(fund_code, 0)
+            change_rate = None
+            change_val = 0.0
+            
+            today_data = details.get("current_info", {}).get("今日涨跌幅") or {}
+            if isinstance(today_data, dict):
+                change_rate = today_data.get("value")
+            elif details.get("current_info", {}).get("日增长率"):
                 change_rate = details["current_info"]["日增长率"]
-                if change_rate:
-                    try:
-                        # 清理百分比符号并转换为浮点数
-                        change_val = float(str(change_rate).replace('%', ''))
-                        total_change += change_val
-                        valid_funds += 1
+            
+            if change_rate:
+                try:
+                    change_val = float(str(change_rate).replace('%', ''))
+                    total_change += change_val
+                    valid_funds += 1
 
-                        summary["fund_performance"].append({
-                            "fund_code": fund_code,
-                            "change_percent": change_val,
-                            "current_price": details["current_info"].get("单位净值"),
-                            "fund_name": details.get("fund_name", "未知")
-                        })
-                    except (ValueError, TypeError):
-                        logger.warning(f"无法解析基金 {fund_code} 的涨跌幅: {change_rate}")
+                    profit = amount * change_val / 100 if amount else 0
 
-        # 计算平均涨跌幅
+                    summary["fund_performance"].append({
+                        "fund_code": fund_code,
+                        "change_percent": change_val,
+                        "current_price": details["current_info"].get("单位净值"),
+                        "fund_name": details.get("fund_name", "未知"),
+                        "amount": amount,
+                        "profit": profit,
+                        "ratio": 0.0
+                    })
+                except (ValueError, TypeError):
+                    logger.warning(f"无法解析基金 {fund_code} 的涨跌幅: {change_rate}")
+
+        for fund in summary["fund_performance"]:
+            if total_amount > 0:
+                fund["ratio"] = (fund["amount"] / total_amount * 100) if fund["amount"] else 0
+
+        summary["total_amount"] = total_amount
+
         if valid_funds > 0:
             summary["portfolio_change"] = total_change / valid_funds
 
-        # 按涨跌幅排序
         summary["fund_performance"].sort(key=lambda x: x["change_percent"], reverse=True)
 
-        logger.info(f"投资组合摘要: 平均涨跌幅 {summary['portfolio_change']:+.2f}%")
+        logger.info(f"投资组合摘要: 平均涨跌幅 {summary['portfolio_change']:+.2f}%, 总金额 {total_amount:,.2f}元")
         return summary
 
     def save_fund_data(self, fund_results: Dict, filename: str = None) -> str:
@@ -700,11 +741,15 @@ class FundReportGenerator:
             # 3. 批量查询基金数据（传入缓存信息）
             fund_results = self.batch_query_funds(fund_codes, fund_cached_info, pool_name)
 
-            # 3. 生成投资组合摘要
-            portfolio_summary = self.generate_portfolio_summary(fund_results)
+            # 4. 获取基金金额
+            fund_amounts = self.get_fund_amounts_from_pool(pool_name)
+            fund_results["fund_amounts"] = fund_amounts
+
+            # 5. 生成投资组合摘要
+            portfolio_summary = self.generate_portfolio_summary(fund_results, fund_amounts)
             fund_results["portfolio_summary"] = portfolio_summary
 
-            # 4. 保存原始数据
+            # 6. 保存原始数据
             if output_dir:
                 data_file = os.path.join(output_dir, "fund_data.json")
             else:
@@ -797,8 +842,12 @@ class FundReportGenerator:
                 # 批量查询
                 fund_results = self.batch_query_funds(fund_codes, fund_cached_info, pool_name)
 
+                # 获取基金金额
+                fund_amounts = self.get_fund_amounts_from_pool(pool_name)
+                fund_results["fund_amounts"] = fund_amounts
+
                 # 生成摘要
-                portfolio_summary = self.generate_portfolio_summary(fund_results)
+                portfolio_summary = self.generate_portfolio_summary(fund_results, fund_amounts)
                 fund_results["portfolio_summary"] = portfolio_summary
 
                 # 保存原始数据
@@ -873,6 +922,7 @@ class FundReportGenerator:
 
                 # 提取基金数据（扁平化结构供 JS 使用）
                 funds_list = []
+                fund_amounts = fund_results.get("fund_amounts", {})
                 for fund_code, details in fund_results["fund_details"].items():
                     if "current_info" in details:
                         funds_list.append({
@@ -881,7 +931,10 @@ class FundReportGenerator:
                             "data_source": details.get("data_source", "未知"),
                             "current_info": details.get("current_info", {}),
                             "cumulative_returns": details.get("cumulative_returns", {}),
-                            "max_drawdowns": details.get("max_drawdowns", {})
+                            "max_drawdowns": details.get("max_drawdowns", {}),
+                            "fund_info": {
+                                "amount": fund_amounts.get(fund_code, 0)
+                            }
                         })
 
                 pools_data[pool_name] = {
@@ -926,6 +979,8 @@ class FundReportGenerator:
         try:
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             portfolio_summary = fund_results.get("portfolio_summary", {})
+            fund_amounts = fund_results.get("fund_amounts", {})
+            total_amount = portfolio_summary.get("total_amount", 0)
 
             # 构建基金列表行
             fund_rows = ""
@@ -941,7 +996,19 @@ class FundReportGenerator:
                     today_value = today_data.get('value') if isinstance(today_data, dict) else None
                     today_value = today_value if today_value is not None else "--"
 
-                    fund_rows += f"| {fund_code} | {fund_name} | {yesterday_value} | {today_value} |\n"
+                    amount = fund_amounts.get(fund_code, 0)
+                    try:
+                        today_num = float(today_value.replace('%', '').replace('+', '')) if today_value != '--' else 0
+                    except:
+                        today_num = 0
+                    profit = amount * today_num / 100 if amount else 0
+                    ratio = (amount / total_amount * 100) if total_amount > 0 and amount else 0
+
+                    amount_str = f"{amount:,.0f}" if amount else "--"
+                    profit_str = f"{profit:+.2f}" if amount else "--"
+                    ratio_str = f"{ratio:.2f}%" if amount else "--"
+
+                    fund_rows += f"| {fund_code} | {fund_name} | {amount_str} | {profit_str} | {ratio_str} | {yesterday_value} | {today_value} |\n"
 
             # 加载头部模板并渲染
             template = self.load_md_template("HEADER_SINGLE")
@@ -949,6 +1016,7 @@ class FundReportGenerator:
                 timestamp=timestamp,
                 total_funds=fund_results['total_funds'],
                 successful_funds=fund_results['successful_funds'],
+                total_amount=total_amount,
                 portfolio_change=f"{portfolio_summary.get('portfolio_change', 0):+.2f}%",
                 fund_rows=fund_rows
             )
@@ -1031,6 +1099,8 @@ class FundReportGenerator:
             for pool_name, data in all_results.items():
                 fund_results = data["fund_results"]
                 summary = data["portfolio_summary"]
+                fund_amounts = fund_results.get("fund_amounts", {})
+                total_amount = summary.get("total_amount", 0)
 
                 # 构建基金列表行
                 fund_rows = ""
@@ -1046,7 +1116,19 @@ class FundReportGenerator:
                         today_value = today_data.get('value') if isinstance(today_data, dict) else None
                         today_value = today_value if today_value is not None else "--"
 
-                        fund_rows += f"| {fund_code} | {fund_name} | {yesterday_value} | {today_value} |\n"
+                        amount = fund_amounts.get(fund_code, 0)
+                        try:
+                            today_num = float(today_value.replace('%', '').replace('+', '')) if today_value != '--' else 0
+                        except:
+                            today_num = 0
+                        profit = amount * today_num / 100 if amount else 0
+                        ratio = (amount / total_amount * 100) if total_amount > 0 and amount else 0
+
+                        amount_str = f"{amount:,.0f}" if amount else "--"
+                        profit_str = f"{profit:+.2f}" if amount else "--"
+                        ratio_str = f"{ratio:.2f}%" if amount else "--"
+
+                        fund_rows += f"| {fund_code} | {fund_name} | {amount_str} | {profit_str} | {ratio_str} | {yesterday_value} | {today_value} |\n"
 
                 # 构建每个基金的详情
                 fund_details = ""
@@ -1090,6 +1172,7 @@ class FundReportGenerator:
                     pool_name=pool_name,
                     successful=summary['successful_funds'],
                     total=summary['total_funds'],
+                    total_amount=total_amount,
                     change=f"{summary['portfolio_change']:+.2f}%",
                     fund_rows=fund_rows,
                     fund_details=fund_details

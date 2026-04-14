@@ -12,6 +12,7 @@ python fund_report_generator.py -f markdown    # 生成 Markdown 格式报告
 ## Directory Structure
 - `scripts/` - 所有 Python 脚本入口
 - `scripts/fund_pools.json` - 基金池配置（修改后自动保存）
+- `scripts/assets/` - 报告模板目录
 - `venv/` - Python 虚拟环境（必须激活）
 
 ## Key Commands
@@ -20,6 +21,9 @@ python fund_report_generator.py -f markdown    # 生成 Markdown 格式报告
 python fund_pool_manager.py list                 # 列出所有组合
 python fund_pool_manager.py show <池名称>        # 查看组合详情
 python fund_pool_manager.py add <池名称> <基金代码>  # 添加基金
+
+# 加减仓（调整持仓金额）
+python fund_pool_manager.py adjust <池名称> <基金代码> <金额>
 
 # 单基金查询
 python query_fund.py <基金代码> --save --output <文件>
@@ -35,7 +39,11 @@ python query_fund.py <基金代码> --save --output <文件>
 - JSON数据结构：`昨日涨跌幅`/`今日涨跌幅` 是嵌套对象 `{"value": "+0.28%", "date": "04-08"}`
 - 并行查询：最多3个线程同时查询
 - 报告模板：`scripts/assets/report_template.html`
-- Markdown模板：`scripts/assets/report_template.md`
+- 美化模板：`scripts/assets/report_template_v2.html`
+
+## 颜色规则
+- 涨跌幅为正：红色 (#e74c3c)
+- 涨跌幅为负：绿色 (#27ae60)
 
 ## Git 提交规则
 - 提交前必须先展示修改摘要并询问用户确认

@@ -136,6 +136,57 @@ class FundPoolManager:
 
         return None
 
+    def adjust_amount(self, pool_name: str, fund_code: str, amount: float, operation: str = "set") -> bool:
+        """调整基金金额
+        
+        Args:
+            pool_name: 基金池名称
+            fund_code: 基金代码
+            amount: 金额
+            operation: 操作类型
+                - "set": 设置为指定金额（覆盖）
+                - "add": 加仓（增加金额）
+                - "reduce": 减仓（减少金额）
+        """
+        if pool_name not in self.pools:
+            print(f"❌ 基金池 '{pool_name}' 不存在")
+            return False
+
+        funds = self.pools[pool_name]["funds"]
+        found = False
+        
+        for i, fund in enumerate(funds):
+            fund_dict = self._normalize_fund(fund)
+            if fund_dict["code"] == fund_code:
+                found = True
+                current_amount = fund_dict.get("amount", 0)
+                
+                if operation == "set":
+                    new_amount = amount
+                elif operation == "add":
+                    new_amount = current_amount + amount
+                elif operation == "reduce":
+                    new_amount = current_amount - amount
+                    if new_amount < 0:
+                        print(f"❌ 减仓后金额不能为负: {new_amount}")
+                        return False
+                else:
+                    print(f"❌ 未知的操作类型: {operation}")
+                    return False
+                
+                funds[i]["amount"] = new_amount
+                self.pools[pool_name]["updated_at"] = datetime.now().isoformat()
+                
+                op_names = {"set": "设置", "add": "加仓", "reduce": "减仓"}
+                print(f"✅ {op_names.get(operation, operation)} {fund_code}: {current_amount:,.0f} -> {new_amount:,.0f} 元")
+                return self._save_pools()
+        
+        if not found:
+            print(f"❌ 基金代码 '{fund_code}' 不在基金池 '{pool_name}' 中")
+            return False
+        
+        return False
+
     def get_all_fund_codes(self, pool_name: str) -> List[str]:
         """获取基金池中所有基金代码"""
         if pool_name not in self.pools:
@@ -257,6 +308,14 @@ def main():
     show_parser = subparsers.add_parser('show', help='显示基金池详情')
     show_parser.add_argument('pool_name', help='基金池名称')
 
+    # 调整金额命令
+    adjust_parser = subparsers.add_parser('adjust', help='调整基金金额')
+    adjust_parser.add_argument('pool_name', help='基金池名称')
+    adjust_parser.add_argument('fund_code', help='基金代码')
+    adjust_parser.add_argument('amount', type=float, help='金额')
+    adjust_parser.add_argument('--operation', '-o', choices=['set', 'add', 'reduce'], default='set',
+                           help='操作类型: set=设置金额, add=加仓, reduce=减仓 (默认: set)')
+
     args = parser.parse_args()
 
     if not args.command:
@@ -279,6 +338,12 @@ def main():
         manager.list_pools()
     elif args.command == 'show':
         manager.show_pool(args.pool_name)
+    elif args.command == 'adjust':
+        amount = args.amount
+        if amount is None:
+            print("❌ 请指定金额")
+        else:
+            manager.adjust_amount(args.pool_name, args.fund_code, args.amount, args.operation)
 
 
 if __name__ == "__main__":
