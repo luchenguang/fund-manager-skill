@@ -741,6 +741,13 @@ class FundReportGenerator:
             # 3. 批量查询基金数据（传入缓存信息）
             fund_results = self.batch_query_funds(fund_codes, fund_cached_info, pool_name)
 
+            # 检查是否有查询失败的基金
+            failed_count = fund_results.get("failed_funds", 0)
+            if failed_count > 0:
+                logger.error(f"数据查询失败 {failed_count} 个基金，不生成报告")
+                print(f"\n❌ 数据查询失败（{failed_count} 个基金），请检查网络后重试")
+                return False
+
             # 4. 获取基金金额
             fund_amounts = self.get_fund_amounts_from_pool(pool_name)
             fund_results["fund_amounts"] = fund_amounts
@@ -841,6 +848,13 @@ class FundReportGenerator:
 
                 # 批量查询
                 fund_results = self.batch_query_funds(fund_codes, fund_cached_info, pool_name)
+
+                # 检查是否有查询失败的基金
+                failed_count = fund_results.get("failed_funds", 0)
+                if failed_count > 0:
+                    logger.error(f"组合 '{pool_name}' 数据查询失败 {failed_count} 个基金，跳过该组合")
+                    print(f"\n❌ 组合 '{pool_name}' 数据查询失败（{failed_count} 个基金），请检查网络后重试")
+                    continue
 
                 # 获取基金金额
                 fund_amounts = self.get_fund_amounts_from_pool(pool_name)
